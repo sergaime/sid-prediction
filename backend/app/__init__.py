@@ -9,7 +9,7 @@ import warnings
 # 需要在所有其他导入之前设置
 warnings.filterwarnings("ignore", message=".*resource_tracker.*")
 
-from flask import Flask, request
+from flask import Flask, request, send_file
 from flask_cors import CORS
 
 from .config import Config
@@ -72,6 +72,12 @@ def create_app(config_class=Config):
     @app.route('/health')
     def health():
         return {'status': 'ok', 'service': 'MiroFish Backend'}
+
+    # Serve predictor UI at root
+    @app.route('/')
+    def predictor_ui():
+        predictor_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'predictor.html')
+        return send_file(predictor_path)
     
     if should_log_startup:
         logger.info("MiroFish Backend 启动完成")

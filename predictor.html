@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sid Prediction</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1a1a24;
+    --border: #2a2a3a;
+    --text: #e4e4ef;
+    --text-dim: #8888a0;
+    --accent: #6366f1;
+    --accent-glow: rgba(99, 102, 241, 0.3);
+    --green: #22c55e;
+    --red: #ef4444;
+    --orange: #f59e0b;
+    --cyan: #06b6d4;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated background */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse at 30% 20%, rgba(99, 102, 241, 0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(6, 182, 212, 0.04) 0%, transparent 50%);
+    animation: bgFloat 20s ease-in-out infinite;
+    z-index: -1;
+  }
+  @keyframes bgFloat {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(-2%, -1%); }
+  }
+
+  .container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 40px 20px;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .logo {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .logo span {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo .dot {
+    width: 8px;
+    height: 8px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--accent-glow); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 8px transparent; }
+  }
+  .tagline {
+    font-size: 32px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--text) 0%, var(--text-dim) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.3;
+  }
+  .subtitle {
+    font-size: 15px;
+    color: var(--text-dim);
+    margin-top: 8px;
+  }
+
+  /* Card */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+    transition: border-color 0.3s;
+  }
+  .card:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-glow);
+  }
+
+  .label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  /* Question input */
+  .question-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: inherit;
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--text);
+    resize: none;
+    line-height: 1.5;
+  }
+  .question-input::placeholder {
+    color: #44445a;
+  }
+
+  /* Context area */
+  .context-section {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+  .context-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 500;
+    transition: color 0.2s;
+    background: none;
+    border: none;
+    font-family: inherit;
+  }
+  .context-toggle:hover { color: var(--text); }
+  .context-toggle svg {
+    transition: transform 0.2s;
+  }
+  .context-toggle.open svg {
+    transform: rotate(90deg);
+  }
+  .context-area {
+    display: none;
+    margin-top: 12px;
+  }
+  .context-area.visible { display: block; }
+  .context-textarea {
+    width: 100%;
+    min-height: 120px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text);
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .context-textarea:focus {
+    border-color: var(--accent);
+  }
+  .context-textarea::placeholder {
+    color: #44445a;
+  }
+
+  /* File upload */
+  .file-upload {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .file-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: var(--surface2);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    color: var(--text-dim);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .file-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+  .file-name {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  #fileInput { display: none; }
+
+  /* Predict button */
+  .predict-btn {
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+    border: none;
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .predict-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 30px var(--accent-glow);
+  }
+  .predict-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .predict-btn .shimmer {
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    animation: shimmer 2s infinite;
+  }
+  @keyframes shimmer {
+    100% { left: 100%; }
+  }
+
+  /* Progress */
+  .progress-section {
+    display: none;
+  }
+  .progress-section.visible { display: block; }
+
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .pipeline-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 14px;
+    transition: all 0.3s;
+  }
+  .pipeline-step.active {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.05);
+  }
+  .pipeline-step.done {
+    border-color: var(--green);
+    background: rgba(34, 197, 94, 0.05);
+  }
+  .pipeline-step.error {
+    border-color: var(--red);
+    background: rgba(239, 68, 68, 0.05);
+  }
+  .step-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+    background: var(--surface2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    transition: all 0.3s;
+  }
+  .pipeline-step.active .step-icon {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    animation: spin 1.5s linear infinite;
+  }
+  @keyframes spin {
+    100% { transform: rotate(360deg); }
+  }
+  .pipeline-step.done .step-icon {
+    background: var(--green);
+    color: white;
+    border-color: var(--green);
+    animation: none;
+  }
+  .pipeline-step.error .step-icon {
+    background: var(--red);
+    color: white;
+    border-color: var(--red);
+    animation: none;
+  }
+  .step-info { flex: 1; }
+  .step-name { font-weight: 500; }
+  .step-detail {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  .step-progress {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+
+  /* Results */
+  .results-section {
+    display: none;
+  }
+  .results-section.visible { display: block; }
+
+  .verdict-card {
+    text-align: center;
+    padding: 40px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin-bottom: 24px;
+  }
+  .verdict-label {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+  .verdict-question {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 24px;
+    line-height: 1.4;
+  }
+  .verdict-badge {
+    display: inline-block;
+    padding: 8px 24px;
+    border-radius: 100px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .verdict-badge.positive {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--green);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+  }
+  .verdict-badge.negative {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--red);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+  .verdict-badge.neutral {
+    background: rgba(245, 158, 11, 0.15);
+    color: var(--orange);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+  }
+
+  .sim-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+  .stat-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--cyan);
+  }
+  .stat-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Report content */
+  .report-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 24px;
+  }
+  .report-card h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    color: var(--text);
+  }
+  .report-content {
+    font-size: 14px;
+    line-height: 1.8;
+    color: var(--text-dim);
+    white-space: pre-wrap;
+  }
+  .report-content h1, .report-content h2, .report-content h3 {
+    color: var(--text);
+    margin: 20px 0 10px;
+  }
+  .report-content h1 { font-size: 22px; }
+  .report-content h2 { font-size: 18px; }
+  .report-content h3 { font-size: 16px; }
+  .report-content p { margin-bottom: 12px; }
+  .report-content ul, .report-content ol {
+    padding-left: 20px;
+    margin-bottom: 12px;
+  }
+  .report-content li { margin-bottom: 6px; }
+  .report-content strong { color: var(--text); }
+
+  /* Interview section */
+  .interview-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+  .interview-card h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .chat-messages {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .chat-msg {
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 85%;
+  }
+  .chat-msg.user {
+    background: var(--accent);
+    color: white;
+    align-self: flex-end;
+    border-bottom-right-radius: 4px;
+  }
+  .chat-msg.assistant {
+    background: var(--surface2);
+    color: var(--text);
+    align-self: flex-start;
+    border-bottom-left-radius: 4px;
+  }
+  .chat-input-row {
+    display: flex;
+    gap: 8px;
+  }
+  .chat-input {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text);
+    outline: none;
+  }
+  .chat-input:focus { border-color: var(--accent); }
+  .chat-send {
+    padding: 12px 20px;
+    background: var(--accent);
+    border: none;
+    border-radius: 10px;
+    color: white;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .chat-send:hover { opacity: 0.85; }
+  .chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* New prediction button */
+  .new-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .new-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  /* Error */
+  .error-msg {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 10px;
+    padding: 16px;
+    color: var(--red);
+    font-size: 14px;
+    margin-top: 16px;
+    display: none;
+  }
+  .error-msg.visible { display: block; }
+
+  /* Config banner */
+  .config-banner {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    font-size: 13px;
+    color: var(--orange);
+    line-height: 1.6;
+  }
+  .config-banner code {
+    background: rgba(245, 158, 11, 0.15);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <div class="logo"><span><span class="dot"></span> SID PREDICTION</span></div>
+    <div class="tagline">Predict Anything</div>
+    <div class="subtitle">Multi-agent swarm intelligence simulation engine</div>
+  </div>
+
+  <!-- Config Banner -->
+  <div class="config-banner" id="configBanner">
+    Before you start, configure your API keys in <code>.env</code>:<br>
+    <code>LLM_API_KEY</code> (OpenAI-compatible) and <code>ZEP_API_KEY</code> (free at getzep.com).<br>
+    Then start the backend: <code>npm run backend</code>
+  </div>
+
+  <!-- Input Section -->
+  <div id="inputSection">
+    <div class="card">
+      <div class="label">Your Prediction Question</div>
+      <textarea class="question-input" id="questionInput" rows="2"
+        placeholder="Will Bitcoin reach $200,000 by end of 2026?"></textarea>
+
+      <div class="context-section">
+        <button class="context-toggle" id="contextToggle" onclick="toggleContext()">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M4 2L8 6L4 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Add context (paste text or upload a document)
+        </button>
+        <div class="context-area" id="contextArea">
+          <textarea class="context-textarea" id="contextInput"
+            placeholder="Paste relevant context here: news articles, research reports, market analysis..."></textarea>
+          <div class="file-upload">
+            <label class="file-btn" for="fileInput">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+              </svg>
+              Upload file
+            </label>
+            <input type="file" id="fileInput" accept=".pdf,.md,.txt" onchange="handleFile(this)">
+            <span class="file-name" id="fileName"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="predict-btn" id="predictBtn" onclick="startPrediction()">
+      <span class="shimmer"></span>
+      Run Prediction
+    </button>
+
+    <div class="error-msg" id="errorMsg"></div>
+  </div>
+
+  <!-- Progress Section -->
+  <div class="progress-section" id="progressSection">
+    <div class="card" style="padding: 24px">
+      <div class="label" style="margin-bottom: 16px">Pipeline Progress</div>
+      <div class="pipeline">
+        <div class="pipeline-step" id="step-ontology">
+          <div class="step-icon">1</div>
+          <div class="step-info">
+            <div class="step-name">Ontology Generation</div>
+            <div class="step-detail" id="step-ontology-detail">Analyzing documents & extracting entity types</div>
+          </div>
+          <div class="step-progress" id="step-ontology-progress"></div>
+        </div>
+        <div class="pipeline-step" id="step-graph">
+          <div class="step-icon">2</div>
+          <div class="step-info">
+            <div class="step-name">Knowledge Graph</div>
+            <div class="step-detail" id="step-graph-detail">Building connections between entities</div>
+          </div>
+          <div class="step-progress" id="step-graph-progress"></div>
+        </div>
+        <div class="pipeline-step" id="step-simulation">
+          <div class="step-icon">3</div>
+          <div class="step-info">
+            <div class="step-name">Agent Simulation</div>
+            <div class="step-detail" id="step-simulation-detail">Running multi-agent prediction swarm</div>
+          </div>
+          <div class="step-progress" id="step-simulation-progress"></div>
+        </div>
+        <div class="pipeline-step" id="step-report">
+          <div class="step-icon">4</div>
+          <div class="step-info">
+            <div class="step-name">Report Generation</div>
+            <div class="step-detail" id="step-report-detail">Synthesizing prediction insights</div>
+          </div>
+          <div class="step-progress" id="step-report-progress"></div>
+        </div>
+      </div>
+    </div>
+    <button class="new-btn" onclick="cancelPrediction()" id="cancelBtn">Cancel</button>
+  </div>
+
+  <!-- Results Section -->
+  <div class="results-section" id="resultsSection">
+    <div class="verdict-card" id="verdictCard">
+      <div class="verdict-label">Prediction Result</div>
+      <div class="verdict-question" id="verdictQuestion"></div>
+      <div class="verdict-badge neutral" id="verdictBadge">Analysis Complete</div>
+    </div>
+
+    <div class="sim-stats" id="simStats">
+      <div class="stat-box">
+        <div class="stat-value" id="statAgents">--</div>
+        <div class="stat-label">Agents</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="statRounds">--</div>
+        <div class="stat-label">Rounds</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="statActions">--</div>
+        <div class="stat-label">Actions</div>
+      </div>
+    </div>
+
+    <div class="report-card">
+      <h2>Prediction Report</h2>
+      <div class="report-content" id="reportContent"></div>
+    </div>
+
+    <!-- Interview Section -->
+    <div class="interview-card" id="interviewCard">
+      <h3>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2">
+          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+        </svg>
+        Ask the Agents
+      </h3>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chatInput" placeholder="Ask a follow-up question..."
+          onkeydown="if(event.key==='Enter')sendChat()">
+        <button class="chat-send" id="chatSendBtn" onclick="sendChat()">Ask</button>
+      </div>
+    </div>
+
+    <button class="new-btn" onclick="newPrediction()">New Prediction</button>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:5001';
+let state = {
+  projectId: null,
+  graphId: null,
+  simulationId: null,
+  reportId: null,
+  chatHistory: [],
+  cancelled: false
+};
+
+// Check if backend is running
+async function checkBackend() {
+  try {
+    const r = await fetch(`${API}/health`);
+    if (r.ok) {
+      document.getElementById('configBanner').style.display = 'none';
+    }
+  } catch(e) {
+    // Backend not running - show config banner
+  }
+}
+checkBackend();
+
+function toggleContext() {
+  const btn = document.getElementById('contextToggle');
+  const area = document.getElementById('contextArea');
+  btn.classList.toggle('open');
+  area.classList.toggle('visible');
+}
+
+function handleFile(input) {
+  const name = input.files[0]?.name || '';
+  document.getElementById('fileName').textContent = name;
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+
+function hideError() {
+  document.getElementById('errorMsg').classList.remove('visible');
+}
+
+function setStep(stepId, status, detail, progress) {
+  const el = document.getElementById(`step-${stepId}`);
+  el.className = `pipeline-step ${status}`;
+  if (detail) document.getElementById(`step-${stepId}-detail`).textContent = detail;
+  if (progress !== undefined) {
+    document.getElementById(`step-${stepId}-progress`).textContent = progress;
+  }
+}
+
+async function poll(url, method, body, checkFn, interval = 3000) {
+  while (!state.cancelled) {
+    await new Promise(r => setTimeout(r, interval));
+    if (state.cancelled) break;
+    try {
+      const opts = method === 'GET' ? {} : {
+        method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+      };
+      const r = await fetch(url, opts);
+      const data = await r.json();
+      const result = checkFn(data);
+      if (result === 'done') return data;
+      if (result === 'error') throw new Error(data.data?.message || data.error || 'Task failed');
+    } catch(e) {
+      if (e.message.includes('failed') || e.message.includes('Failed')) throw e;
+    }
+  }
+  throw new Error('Cancelled');
+}
+
+async function startPrediction() {
+  const question = document.getElementById('questionInput').value.trim();
+  if (!question) { showError('Please enter a prediction question.'); return; }
+  hideError();
+  state = { ...state, projectId: null, graphId: null, simulationId: null, reportId: null, chatHistory: [], cancelled: false };
+
+  // Show progress
+  document.getElementById('inputSection').style.display = 'none';
+  document.getElementById('progressSection').classList.add('visible');
+  document.getElementById('resultsSection').classList.remove('visible');
+
+  // Reset steps
+  ['ontology', 'graph', 'simulation', 'report'].forEach(s => setStep(s, '', null, ''));
+
+  try {
+    // === Step 1: Generate Ontology ===
+    setStep('ontology', 'active', 'Analyzing your question...', '');
+    const contextText = document.getElementById('contextInput')?.value?.trim() || '';
+    const fileInput = document.getElementById('fileInput');
+    const hasFile = fileInput.files && fileInput.files.length > 0;
+
+    const formData = new FormData();
+    formData.append('simulation_requirement', question);
+    formData.append('project_name', question.substring(0, 50));
+
+    if (hasFile) {
+      formData.append('files', fileInput.files[0]);
+    } else {
+      // Create a text file from the context or question
+      const text = contextText || `Prediction Question: ${question}\n\nThis is a prediction analysis task. The system should simulate multiple agents with different perspectives to predict the outcome of the above question. Consider multiple factors including historical trends, current conditions, expert opinions, and potential disruptions.`;
+      const blob = new Blob([text], { type: 'text/plain' });
+      formData.append('files', blob, 'context.txt');
+    }
+
+    if (contextText) {
+      formData.append('additional_context', contextText);
+    }
+
+    const ontRes = await fetch(`${API}/api/graph/ontology/generate`, { method: 'POST', body: formData });
+    const ontData = await ontRes.json();
+    if (!ontData.success) throw new Error(ontData.error || 'Ontology generation failed');
+
+    state.projectId = ontData.data.project_id;
+    const entityCount = ontData.data.ontology?.entity_types?.length || 0;
+    const edgeCount = ontData.data.ontology?.edge_types?.length || 0;
+    setStep('ontology', 'done', `${entityCount} entity types, ${edgeCount} relationships extracted`, '');
+
+    if (state.cancelled) throw new Error('Cancelled');
+
+    // === Step 2: Build Knowledge Graph ===
+    setStep('graph', 'active', 'Building knowledge graph...', '0%');
+
+    const graphRes = await fetch(`${API}/api/graph/build`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: state.projectId })
+    });
+    const graphData = await graphRes.json();
+    if (!graphData.success) throw new Error(graphData.error || 'Graph build failed');
+
+    const taskId = graphData.data.task_id;
+
+    // Poll for graph completion
+    const graphResult = await poll(`${API}/api/graph/task/${taskId}`, 'GET', null, (data) => {
+      if (!data.success) return null;
+      const t = data.data;
+      const progress = t.progress || 0;
+      setStep('graph', 'active', t.message || 'Building...', `${progress}%`);
+      if (t.status === 'completed') return 'done';
+      if (t.status === 'failed') return 'error';
+      return null;
+    });
+
+    state.graphId = graphResult.data?.result?.graph_id;
+    const nodeCount = graphResult.data?.result?.node_count || 0;
+    const edgeCountG = graphResult.data?.result?.edge_count || 0;
+    setStep('graph', 'done', `${nodeCount} nodes, ${edgeCountG} edges`, '');
+
+    if (state.cancelled) throw new Error('Cancelled');
+
+    // === Step 3: Simulation ===
+    setStep('simulation', 'active', 'Creating simulation environment...', '');
+
+    // Create simulation
+    const simCreateRes = await fetch(`${API}/api/simulation/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: state.projectId })
+    });
+    const simCreateData = await simCreateRes.json();
+    if (!simCreateData.success) throw new Error(simCreateData.error || 'Simulation creation failed');
+    state.simulationId = simCreateData.data.simulation_id;
+
+    // Prepare simulation
+    setStep('simulation', 'active', 'Preparing agent profiles...', '');
+    const prepRes = await fetch(`${API}/api/simulation/prepare`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ simulation_id: state.simulationId })
+    });
+    const prepData = await prepRes.json();
+    if (!prepData.success) throw new Error(prepData.error || 'Simulation preparation failed');
+
+    // Poll prepare status
+    if (prepData.data?.task_id && !prepData.data?.already_prepared) {
+      await poll(`${API}/api/simulation/prepare/status`, 'POST',
+        { task_id: prepData.data.task_id, simulation_id: state.simulationId },
+        (data) => {
+          if (!data.success) return null;
+          const t = data.data;
+          setStep('simulation', 'active', t.message || 'Preparing agents...', t.progress ? `${t.progress}%` : '');
+          if (t.status === 'completed' || t.status === 'ready') return 'done';
+          if (t.status === 'failed') return 'error';
+          return null;
+        }
+      );
+    }
+
+    // Start simulation
+    setStep('simulation', 'active', 'Running agent simulation...', '');
+    const startRes = await fetch(`${API}/api/simulation/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ simulation_id: state.simulationId })
+    });
+    const startData = await startRes.json();
+    if (!startData.success) throw new Error(startData.error || 'Simulation start failed');
+
+    // Poll simulation progress
+    await poll(`${API}/api/simulation/${state.simulationId}/run-status`, 'GET', null, (data) => {
+      if (!data.success) return null;
+      const s = data.data;
+      const round = s.current_round || 0;
+      const maxRound = s.total_rounds || '?';
+      const actions = s.total_actions_count || 0;
+      setStep('simulation', 'active', `Round ${round}/${maxRound} - ${actions} agent actions`, `${round}/${maxRound}`);
+      if (s.runner_status === 'completed' || s.runner_status === 'finished') return 'done';
+      if (s.runner_status === 'failed' || s.runner_status === 'error') return 'error';
+      return null;
+    }, 5000);
+
+    // Get simulation stats
+    let agentCount = '--', roundCount = '--', actionCount = '--';
+    try {
+      const runStatusRes = await fetch(`${API}/api/simulation/${state.simulationId}/run-status`);
+      const runStatusData = await runStatusRes.json();
+      if (runStatusData.success) {
+        roundCount = runStatusData.data?.current_round || runStatusData.data?.total_rounds || '--';
+        actionCount = runStatusData.data?.total_actions_count || '--';
+      }
+    } catch(e) {}
+    try {
+      const statsRes = await fetch(`${API}/api/simulation/${state.simulationId}/agent-stats`);
+      const statsData = await statsRes.json();
+      if (statsData.success) {
+        agentCount = statsData.data?.total_agents || statsData.data?.agent_count || '--';
+      }
+    } catch(e) {}
+
+    setStep('simulation', 'done', `Completed with ${agentCount} agents`, '');
+
+    if (state.cancelled) throw new Error('Cancelled');
+
+    // === Step 4: Report ===
+    setStep('report', 'active', 'Generating prediction report...', '0%');
+
+    const reportRes = await fetch(`${API}/api/report/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ simulation_id: state.simulationId })
+    });
+    const reportData = await reportRes.json();
+    if (!reportData.success) throw new Error(reportData.error || 'Report generation failed');
+
+    state.reportId = reportData.data.report_id;
+    const reportTaskId = reportData.data.task_id;
+
+    if (!reportData.data.already_generated && reportTaskId) {
+      // Poll report generation
+      await poll(`${API}/api/report/generate/status`, 'POST',
+        { task_id: reportTaskId, simulation_id: state.simulationId },
+        (data) => {
+          if (!data.success) return null;
+          const t = data.data;
+          const progress = t.progress || 0;
+          setStep('report', 'active', t.message || 'Generating...', `${progress}%`);
+          if (t.status === 'completed') return 'done';
+          if (t.status === 'failed') return 'error';
+          return null;
+        }
+      );
+    }
+
+    setStep('report', 'done', 'Report complete', '');
+
+    // Fetch the report
+    const fullReport = await fetch(`${API}/api/report/${state.reportId}`);
+    const fullReportData = await fullReport.json();
+
+    // Show results
+    showResults(question, fullReportData.data, {
+      agents: agentCount,
+      rounds: roundCount,
+      actions: actionCount
+    });
+
+  } catch(e) {
+    if (e.message === 'Cancelled') {
+      newPrediction();
+      return;
+    }
+    // Find which step failed
+    ['ontology', 'graph', 'simulation', 'report'].forEach(s => {
+      const el = document.getElementById(`step-${s}`);
+      if (el.classList.contains('active')) {
+        setStep(s, 'error', e.message, '');
+      }
+    });
+    showError(e.message);
+    document.getElementById('errorMsg').style.display = 'block';
+    document.getElementById('progressSection').appendChild(document.getElementById('errorMsg'));
+  }
+}
+
+function cancelPrediction() {
+  state.cancelled = true;
+}
+
+function showResults(question, reportData, stats) {
+  document.getElementById('progressSection').classList.remove('visible');
+  document.getElementById('resultsSection').classList.add('visible');
+
+  document.getElementById('verdictQuestion').textContent = question;
+  document.getElementById('statAgents').textContent = stats.agents;
+  document.getElementById('statRounds').textContent = stats.rounds;
+  document.getElementById('statActions').textContent = stats.actions;
+
+  // Render markdown content
+  const md = reportData?.markdown_content || reportData?.content || 'Report generated successfully.';
+  document.getElementById('reportContent').innerHTML = renderMarkdown(md);
+}
+
+function renderMarkdown(text) {
+  // Simple markdown renderer
+  return text
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/^- (.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^(.+)$/gm, (match) => {
+      if (match.startsWith('<')) return match;
+      return match;
+    });
+}
+
+async function sendChat() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg || !state.simulationId) return;
+
+  input.value = '';
+  const chatEl = document.getElementById('chatMessages');
+  const sendBtn = document.getElementById('chatSendBtn');
+
+  // Add user message
+  chatEl.innerHTML += `<div class="chat-msg user">${escapeHtml(msg)}</div>`;
+  chatEl.scrollTop = chatEl.scrollHeight;
+
+  state.chatHistory.push({ role: 'user', content: msg });
+  sendBtn.disabled = true;
+
+  try {
+    const res = await fetch(`${API}/api/report/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        simulation_id: state.simulationId,
+        message: msg,
+        chat_history: state.chatHistory.slice(-10)
+      })
+    });
+    const data = await res.json();
+    const reply = data.data?.response || data.data?.content || 'No response.';
+
+    state.chatHistory.push({ role: 'assistant', content: reply });
+    chatEl.innerHTML += `<div class="chat-msg assistant">${escapeHtml(reply)}</div>`;
+    chatEl.scrollTop = chatEl.scrollHeight;
+  } catch(e) {
+    chatEl.innerHTML += `<div class="chat-msg assistant" style="color: var(--red)">Error: ${escapeHtml(e.message)}</div>`;
+  }
+
+  sendBtn.disabled = false;
+  input.focus();
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function newPrediction() {
+  state = { projectId: null, graphId: null, simulationId: null, reportId: null, chatHistory: [], cancelled: false };
+  document.getElementById('inputSection').style.display = 'block';
+  document.getElementById('progressSection').classList.remove('visible');
+  document.getElementById('resultsSection').classList.remove('visible');
+  document.getElementById('chatMessages').innerHTML = '';
+  hideError();
+  ['ontology', 'graph', 'simulation', 'report'].forEach(s => setStep(s, '', null, ''));
+}
+</script>
+
+</body>
+</html>
