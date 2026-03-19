@@ -730,7 +730,7 @@
 </div>
 
 <script>
-const API = 'http://localhost:5001';
+const API = window.location.hostname === 'localhost' ? 'http://localhost:5001' : window.location.origin;
 let state = {
   projectId: null,
   graphId: null,
