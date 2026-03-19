@@ -951,7 +951,7 @@ The prediction should synthesize these diverse perspectives into a probabilistic
     const startRes = await fetch(`${API}/api/simulation/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ simulation_id: state.simulationId })
+      body: JSON.stringify({ simulation_id: state.simulationId, max_rounds: 10 })
     });
     const startData = await startRes.json();
     if (!startData.success) throw new Error(startData.error || 'Simulation start failed');
