@@ -830,8 +830,34 @@ async function startPrediction() {
     if (hasFile) {
       formData.append('files', fileInput.files[0]);
     } else {
-      // Create a text file from the context or question
-      const text = contextText || `Prediction Question: ${question}\n\nThis is a prediction analysis task. The system should simulate multiple agents with different perspectives to predict the outcome of the above question. Consider multiple factors including historical trends, current conditions, expert opinions, and potential disruptions.`;
+      // Create a rich context document so the graph builder has enough material
+      const text = contextText || `Prediction Question: ${question}
+
+Topic Analysis Document
+
+The following analysis explores the prediction question from multiple perspectives to enable multi-agent simulation.
+
+Stakeholder 1 - The Optimist: This stakeholder believes the outcome will be positive. They point to favorable trends, growing momentum, and historical precedents where similar situations resolved positively. Their confidence level is high based on recent developments and strong fundamentals.
+
+Stakeholder 2 - The Skeptic: This stakeholder is cautious about the outcome. They highlight risks, uncertainties, and potential obstacles. They reference cases where similar predictions failed and emphasize the importance of not overlooking negative signals and contrarian indicators.
+
+Stakeholder 3 - The Analyst: This data-driven stakeholder evaluates the question using quantitative metrics and statistical models. They consider base rates, probability distributions, and regression to the mean. Their assessment weighs both supporting and contradicting evidence equally.
+
+Stakeholder 4 - The Industry Expert: This domain specialist brings deep knowledge of the specific field related to the question. They understand the technical nuances, regulatory environment, competitive dynamics, and insider perspectives that outsiders might miss.
+
+Stakeholder 5 - The Contrarian: This stakeholder deliberately takes the opposite view of the consensus. They look for overlooked risks, hidden opportunities, and scenarios that most people discount. Their role is to stress-test the dominant narrative.
+
+Key Factors to Consider:
+- Historical trends and patterns related to this question
+- Current market conditions and sentiment
+- Regulatory and policy environment
+- Technology and innovation dynamics
+- Social and cultural influences
+- Economic indicators and forecasts
+- Competitive landscape and power dynamics
+- Risk factors and potential black swan events
+
+The prediction should synthesize these diverse perspectives into a probabilistic assessment with confidence intervals and key assumptions clearly stated.`;
       const blob = new Blob([text], { type: 'text/plain' });
       formData.append('files', blob, 'context.txt');
     }
