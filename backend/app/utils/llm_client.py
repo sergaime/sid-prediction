@@ -65,8 +65,8 @@ class LLMClient:
         if response_format:
             kwargs["response_format"] = response_format
         
-        # Retry with exponential backoff on rate limit errors
-        max_retries = 5
+        # Retry with short backoff on rate limit errors (keep within Cloudflare timeout)
+        max_retries = 3
         for attempt in range(max_retries):
             try:
                 response = self.client.chat.completions.create(**kwargs)
@@ -75,23 +75,13 @@ class LLMClient:
                 content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
                 return content
             except RateLimitError as e:
-                # Parse retry-after from error message if available
-                wait_time = min(30 * (2 ** attempt), 120)  # 30s, 60s, 120s max
-                error_msg = str(e)
-                # Try to extract wait time from "Please try again in Xm Ys" pattern
-                import re as re_mod
-                match = re_mod.search(r'try again in (\d+)m', error_msg)
-                if match:
-                    wait_time = min(int(match.group(1)) * 60, 300)  # Cap at 5 min
-                else:
-                    match = re_mod.search(r'try again in (\d+\.?\d*)s', error_msg)
-                    if match:
-                        wait_time = min(int(float(match.group(1))) + 1, 120)
-
+                # Short waits only — Cloudflare times out at ~100s
+                wait_time = min(5 * (2 ** attempt), 20)  # 5s, 10s, 20s
                 if attempt < max_retries - 1:
-                    logger.warning(f"Rate limit hit, waiting {wait_time}s before retry {attempt+2}/{max_retries}")
+                    logger.warning(f"Rate limit hit, waiting {wait_time}s (retry {attempt+2}/{max_retries}): {str(e)[:100]}")
                     time.sleep(wait_time)
                 else:
+                    logger.error(f"Rate limit exceeded after {max_retries} retries: {str(e)[:200]}")
                     raise
     
     def chat_json(
