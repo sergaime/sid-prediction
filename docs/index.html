@@ -738,15 +738,35 @@ let state = {
   cancelled: false
 };
 
-// Check if backend is running
-async function checkBackend() {
+let backendReady = false;
+
+// Fetch with timeout helper
+async function fetchWithTimeout(url, opts = {}, timeoutMs = 120000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const r = await fetch(`${API}/health`);
+    const r = await fetch(url, { ...opts, signal: controller.signal });
+    clearTimeout(timer);
+    return r;
+  } catch(e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') throw new Error('Request timed out — the server may be starting up. Please try again.');
+    throw e;
+  }
+}
+
+// Wake up backend (Render free tier sleeps after 15min of inactivity)
+async function checkBackend() {
+  const banner = document.getElementById('configBanner');
+  banner.textContent = 'Waking up prediction engine (free tier cold start ~30s)...';
+  try {
+    const r = await fetchWithTimeout(`${API}/health`, {}, 60000);
     if (r.ok) {
-      document.getElementById('configBanner').style.display = 'none';
+      backendReady = true;
+      banner.style.display = 'none';
     }
   } catch(e) {
-    // Backend not running - show config banner
+    banner.textContent = 'Server is starting up — first request may take up to 60s. You can still submit.';
   }
 }
 checkBackend();
@@ -790,7 +810,7 @@ async function poll(url, method, body, checkFn, interval = 3000) {
       const opts = method === 'GET' ? {} : {
         method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
       };
-      const r = await fetch(url, opts);
+      const r = await fetchWithTimeout(url, opts, 60000);
       const data = await r.json();
       const result = checkFn(data);
       if (result === 'done') return data;
@@ -818,7 +838,7 @@ async function startPrediction() {
 
   try {
     // === Step 1: Generate Ontology ===
-    setStep('ontology', 'active', 'Analyzing your question...', '');
+    setStep('ontology', 'active', backendReady ? 'Analyzing your question...' : 'Waking up server & analyzing (may take ~60s)...', '');
     const contextText = document.getElementById('contextInput')?.value?.trim() || '';
     const fileInput = document.getElementById('fileInput');
     const hasFile = fileInput.files && fileInput.files.length > 0;
@@ -866,9 +886,14 @@ The prediction should synthesize these diverse perspectives into a probabilistic
       formData.append('additional_context', contextText);
     }
 
-    const ontRes = await fetch(`${API}/api/graph/ontology/generate`, { method: 'POST', body: formData });
+    const ontRes = await fetchWithTimeout(`${API}/api/graph/ontology/generate`, { method: 'POST', body: formData }, 180000);
+    if (!ontRes.ok) {
+      const errText = await ontRes.text().catch(() => 'Unknown error');
+      throw new Error(`Server error (${ontRes.status}): ${errText}`);
+    }
     const ontData = await ontRes.json();
     if (!ontData.success) throw new Error(ontData.error || 'Ontology generation failed');
+    backendReady = true;
 
     state.projectId = ontData.data.project_id;
     const entityCount = ontData.data.ontology?.entity_types?.length || 0;
@@ -880,7 +905,7 @@ The prediction should synthesize these diverse perspectives into a probabilistic
     // === Step 2: Build Knowledge Graph ===
     setStep('graph', 'active', 'Building knowledge graph...', '0%');
 
-    const graphRes = await fetch(`${API}/api/graph/build`, {
+    const graphRes = await fetchWithTimeout(`${API}/api/graph/build`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ project_id: state.projectId })
@@ -912,7 +937,7 @@ The prediction should synthesize these diverse perspectives into a probabilistic
     setStep('simulation', 'active', 'Creating simulation environment...', '');
 
     // Create simulation
-    const simCreateRes = await fetch(`${API}/api/simulation/create`, {
+    const simCreateRes = await fetchWithTimeout(`${API}/api/simulation/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ project_id: state.projectId })
@@ -923,7 +948,7 @@ The prediction should synthesize these diverse perspectives into a probabilistic
 
     // Prepare simulation
     setStep('simulation', 'active', 'Preparing agent profiles...', '');
-    const prepRes = await fetch(`${API}/api/simulation/prepare`, {
+    const prepRes = await fetchWithTimeout(`${API}/api/simulation/prepare`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ simulation_id: state.simulationId })
@@ -948,7 +973,7 @@ The prediction should synthesize these diverse perspectives into a probabilistic
 
     // Start simulation
     setStep('simulation', 'active', 'Running agent simulation...', '');
-    const startRes = await fetch(`${API}/api/simulation/start`, {
+    const startRes = await fetchWithTimeout(`${API}/api/simulation/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ simulation_id: state.simulationId, max_rounds: 10 })
@@ -994,7 +1019,7 @@ The prediction should synthesize these diverse perspectives into a probabilistic
     // === Step 4: Report ===
     setStep('report', 'active', 'Generating prediction report...', '0%');
 
-    const reportRes = await fetch(`${API}/api/report/generate`, {
+    const reportRes = await fetchWithTimeout(`${API}/api/report/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ simulation_id: state.simulationId })
@@ -1039,14 +1064,20 @@ The prediction should synthesize these diverse perspectives into a probabilistic
       newPrediction();
       return;
     }
+    console.error('Pipeline error:', e);
     // Find which step failed
+    let failedStep = null;
     ['ontology', 'graph', 'simulation', 'report'].forEach(s => {
       const el = document.getElementById(`step-${s}`);
       if (el.classList.contains('active')) {
-        setStep(s, 'error', e.message, '');
+        failedStep = s;
+        setStep(s, 'error', e.message || 'Unknown error', '');
       }
     });
-    showError(e.message);
+    const errMsg = e.message || 'Unknown error occurred';
+    const hint = errMsg.includes('timed out') ? ' The free server may be sleeping — try again in 30 seconds.' :
+                 errMsg.includes('Failed to fetch') ? ' Network error — check your internet connection or try again.' : '';
+    showError(errMsg + hint);
     document.getElementById('errorMsg').style.display = 'block';
     document.getElementById('progressSection').appendChild(document.getElementById('errorMsg'));
   }
