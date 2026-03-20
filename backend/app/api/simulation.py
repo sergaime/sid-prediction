@@ -1595,16 +1595,10 @@ def start_simulation():
             
             logger.info(f"启用图谱记忆更新: simulation_id={simulation_id}, graph_id={graph_id}")
         
-        # Try OASIS simulation first, fall back to lightweight LLM-based simulation
+        # Use lite LLM-based simulation unless OASIS is explicitly enabled via env var
         lite_mode = data.get('lite', False)
-        use_lite = lite_mode
-
-        if not use_lite:
-            try:
-                import oasis  # noqa: F401
-            except ImportError:
-                logger.info(f"OASIS not available, using lite simulation for {simulation_id}")
-                use_lite = True
+        oasis_enabled = os.environ.get('OASIS_ENABLED', '').lower() in ('1', 'true', 'yes')
+        use_lite = lite_mode or not oasis_enabled
 
         # Get simulation requirement for lite mode
         simulation_requirement = ""

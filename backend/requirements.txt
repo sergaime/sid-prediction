@@ -17,9 +17,9 @@ openai>=1.0.0
 zep-cloud==3.13.0
 
 # ============= OASIS 社交媒体模拟 =============
-# OASIS 社交模拟框架
-camel-oasis==0.2.5
-camel-ai==0.2.78
+# OASIS requires too much RAM for free-tier cloud (512MB).
+# Only install locally: pip install camel-oasis==0.2.5 camel-ai==0.2.78
+# Set OASIS_ENABLED=true in env to use full OASIS simulation.
 
 # ============= 文件处理 =============
 PyMuPDF>=1.24.0
