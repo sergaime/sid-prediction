@@ -982,6 +982,7 @@ The prediction should synthesize these diverse perspectives into a probabilistic
     if (!startData.success) throw new Error(startData.error || 'Simulation start failed');
 
     // Poll simulation progress
+    let idleCount = 0;
     await poll(`${API}/api/simulation/${state.simulationId}/run-status`, 'GET', null, (data) => {
       if (!data.success) return null;
       const s = data.data;
@@ -991,6 +992,13 @@ The prediction should synthesize these diverse perspectives into a probabilistic
       setStep('simulation', 'active', `Round ${round}/${maxRound} - ${actions} agent actions`, `${round}/${maxRound}`);
       if (s.runner_status === 'completed' || s.runner_status === 'finished') return 'done';
       if (s.runner_status === 'failed' || s.runner_status === 'error') return 'error';
+      // If stuck on idle after starting, the subprocess crashed
+      if (s.runner_status === 'idle' && round === 0) {
+        idleCount++;
+        if (idleCount > 6) return 'error'; // After ~30s of idle, fail
+      } else {
+        idleCount = 0;
+      }
       return null;
     }, 5000);
 

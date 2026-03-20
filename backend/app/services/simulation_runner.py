@@ -225,6 +225,146 @@ class SimulationRunner:
     
     # 图谱记忆更新配置
     _graph_memory_enabled: Dict[str, bool] = {}  # simulation_id -> enabled
+
+    @classmethod
+    def start_lite_simulation(
+        cls,
+        simulation_id: str,
+        max_rounds: int = 5,
+        simulation_requirement: str = "",
+    ) -> SimulationRunState:
+        """
+        Lightweight in-process simulation using LLM calls.
+        Does not require OASIS/camel-ai. Runs entirely in-process via Groq API.
+        Each agent generates discussion posts about the prediction question.
+        """
+        from ..utils.llm_client import LLMClient
+
+        existing = cls.get_run_state(simulation_id)
+        if existing and existing.runner_status in [RunnerStatus.RUNNING, RunnerStatus.STARTING]:
+            raise ValueError(f"模拟已在运行中: {simulation_id}")
+
+        sim_dir = os.path.join(cls.RUN_STATE_DIR, simulation_id)
+        os.makedirs(sim_dir, exist_ok=True)
+
+        # Load agent profiles
+        profiles = []
+        for fname in ["reddit_profiles.json", "twitter_profiles.csv"]:
+            fpath = os.path.join(sim_dir, fname)
+            if os.path.exists(fpath) and fname.endswith('.json'):
+                with open(fpath, 'r', encoding='utf-8') as f:
+                    profiles = json.load(f)
+                break
+
+        if not profiles:
+            # Try loading from config
+            config_path = os.path.join(sim_dir, "simulation_config.json")
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                profiles = config.get("agents", config.get("reddit_agents", config.get("twitter_agents", [])))
+
+        total_rounds = min(max_rounds or 5, 10)
+
+        state = SimulationRunState(
+            simulation_id=simulation_id,
+            runner_status=RunnerStatus.STARTING,
+            total_rounds=total_rounds,
+            total_simulation_hours=1,
+            started_at=datetime.now().isoformat(),
+        )
+        cls._save_run_state(state)
+
+        def run_lite():
+            try:
+                llm = LLMClient()
+                state.runner_status = RunnerStatus.RUNNING
+                cls._save_run_state(state)
+
+                agent_names = []
+                for p in profiles[:10]:  # Cap at 10 agents
+                    name = p.get("name") or p.get("username") or p.get("agent_name", f"Agent_{len(agent_names)+1}")
+                    agent_names.append(name)
+
+                if not agent_names:
+                    agent_names = ["Analyst", "Optimist", "Skeptic", "Expert", "Contrarian"]
+
+                # Create action log dirs
+                os.makedirs(os.path.join(sim_dir, "twitter"), exist_ok=True)
+                os.makedirs(os.path.join(sim_dir, "reddit"), exist_ok=True)
+
+                twitter_log = os.path.join(sim_dir, "twitter", "actions.jsonl")
+                reddit_log = os.path.join(sim_dir, "reddit", "actions.jsonl")
+
+                requirement = simulation_requirement or "prediction analysis"
+
+                for round_num in range(1, total_rounds + 1):
+                    state.current_round = round_num
+                    state.twitter_current_round = round_num
+                    state.reddit_current_round = round_num
+                    cls._save_run_state(state)
+
+                    for i, agent_name in enumerate(agent_names):
+                        try:
+                            prompt = f"""You are {agent_name}, participating in a prediction discussion about: "{requirement}"
+
+This is round {round_num} of {total_rounds}. Write a short social media post (2-3 sentences) sharing your perspective on this prediction. Be specific and analytical. Respond with ONLY the post text, no meta-commentary."""
+
+                            response = llm.chat([{"role": "user", "content": prompt}], temperature=0.8, max_tokens=200)
+
+                            # Log as action
+                            action_data = {
+                                "round": round_num,
+                                "timestamp": datetime.now().isoformat(),
+                                "agent_id": i,
+                                "agent_name": agent_name,
+                                "action_type": "CREATE_POST",
+                                "content": response,
+                                "success": True
+                            }
+
+                            with open(twitter_log, 'a', encoding='utf-8') as f:
+                                f.write(json.dumps(action_data, ensure_ascii=False) + '\n')
+
+                            state.twitter_actions_count += 1
+                            state.add_action(AgentAction(
+                                round_num=round_num,
+                                timestamp=datetime.now().isoformat(),
+                                platform="twitter",
+                                agent_id=i,
+                                agent_name=agent_name,
+                                action_type="CREATE_POST",
+                                result=response[:100],
+                                success=True
+                            ))
+                            cls._save_run_state(state)
+
+                        except Exception as e:
+                            logger.warning(f"Lite sim agent {agent_name} error: {e}")
+                            continue
+
+                state.runner_status = RunnerStatus.COMPLETED
+                state.completed_at = datetime.now().isoformat()
+                state.twitter_completed = True
+                state.reddit_completed = True
+                cls._save_run_state(state)
+                logger.info(f"Lite simulation completed: {simulation_id}")
+
+            except Exception as e:
+                logger.error(f"Lite simulation failed: {simulation_id}, error={e}")
+                state.runner_status = RunnerStatus.FAILED
+                state.error = str(e)
+                cls._save_run_state(state)
+
+        # Run in background thread
+        thread = threading.Thread(target=run_lite, daemon=True)
+        thread.start()
+        cls._monitor_threads[simulation_id] = thread
+
+        state.runner_status = RunnerStatus.RUNNING
+        cls._save_run_state(state)
+
+        return state
     
     @classmethod
     def get_run_state(cls, simulation_id: str) -> Optional[SimulationRunState]:

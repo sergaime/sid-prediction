@@ -1595,24 +1595,49 @@ def start_simulation():
             
             logger.info(f"启用图谱记忆更新: simulation_id={simulation_id}, graph_id={graph_id}")
         
-        # 启动模拟
-        run_state = SimulationRunner.start_simulation(
-            simulation_id=simulation_id,
-            platform=platform,
-            max_rounds=max_rounds,
-            enable_graph_memory_update=enable_graph_memory_update,
-            graph_id=graph_id
-        )
-        
+        # Try OASIS simulation first, fall back to lightweight LLM-based simulation
+        lite_mode = data.get('lite', False)
+        use_lite = lite_mode
+
+        if not use_lite:
+            try:
+                import oasis  # noqa: F401
+            except ImportError:
+                logger.info(f"OASIS not available, using lite simulation for {simulation_id}")
+                use_lite = True
+
+        # Get simulation requirement for lite mode
+        simulation_requirement = ""
+        if use_lite:
+            project = ProjectManager.get_project(state.project_id)
+            if project:
+                simulation_requirement = project.simulation_requirement or ""
+
+        if use_lite:
+            run_state = SimulationRunner.start_lite_simulation(
+                simulation_id=simulation_id,
+                max_rounds=max_rounds or 5,
+                simulation_requirement=simulation_requirement,
+            )
+        else:
+            run_state = SimulationRunner.start_simulation(
+                simulation_id=simulation_id,
+                platform=platform,
+                max_rounds=max_rounds,
+                enable_graph_memory_update=enable_graph_memory_update,
+                graph_id=graph_id
+            )
+
         # 更新模拟状态
         state.status = SimulationStatus.RUNNING
         manager._save_simulation_state(state)
-        
+
         response_data = run_state.to_dict()
         if max_rounds:
             response_data['max_rounds_applied'] = max_rounds
         response_data['graph_memory_update_enabled'] = enable_graph_memory_update
         response_data['force_restarted'] = force_restarted
+        response_data['lite_mode'] = use_lite
         if enable_graph_memory_update:
             response_data['graph_id'] = graph_id
         
