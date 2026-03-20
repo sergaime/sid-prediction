@@ -75,13 +75,31 @@ class LLMClient:
                 content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
                 return content
             except RateLimitError as e:
-                # Short waits only — Cloudflare times out at ~100s
+                error_msg = str(e)
+                # On daily token limit (TPD), try falling back to a different model
+                if 'tokens per day' in error_msg or 'TPD' in error_msg:
+                    fallback_models = [
+                        'meta-llama/llama-4-scout-17b-16e-instruct',
+                        'llama-3.1-8b-instant',
+                        'llama-3.3-70b-versatile',
+                    ]
+                    current = kwargs.get('model', self.model)
+                    for fb in fallback_models:
+                        if fb != current:
+                            logger.warning(f"Daily limit hit for {current}, falling back to {fb}")
+                            kwargs['model'] = fb
+                            self.model = fb  # Update for future calls too
+                            break
+                    else:
+                        raise  # No fallback available
+                    continue  # Retry with new model
+
+                # Short waits for RPM/TPM limits — Cloudflare times out at ~100s
                 wait_time = min(5 * (2 ** attempt), 20)  # 5s, 10s, 20s
                 if attempt < max_retries - 1:
-                    logger.warning(f"Rate limit hit, waiting {wait_time}s (retry {attempt+2}/{max_retries}): {str(e)[:100]}")
+                    logger.warning(f"Rate limit hit, waiting {wait_time}s (retry {attempt+2}/{max_retries})")
                     time.sleep(wait_time)
                 else:
-                    logger.error(f"Rate limit exceeded after {max_retries} retries: {str(e)[:200]}")
                     raise
     
     def chat_json(
