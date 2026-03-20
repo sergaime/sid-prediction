@@ -5,10 +5,14 @@ LLM客户端封装
 
 import json
 import re
+import time
+import logging
 from typing import Optional, Dict, Any, List
-from openai import OpenAI
+from openai import OpenAI, RateLimitError, APIError
 
 from ..config import Config
+
+logger = logging.getLogger('mirofish.llm_client')
 
 
 class LLMClient:
@@ -61,11 +65,34 @@ class LLMClient:
         if response_format:
             kwargs["response_format"] = response_format
         
-        response = self.client.chat.completions.create(**kwargs)
-        content = response.choices[0].message.content
-        # 部分模型（如MiniMax M2.5）会在content中包含<think>思考内容，需要移除
-        content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
-        return content
+        # Retry with exponential backoff on rate limit errors
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(**kwargs)
+                content = response.choices[0].message.content
+                # 部分模型（如MiniMax M2.5）会在content中包含<think>思考内容，需要移除
+                content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
+                return content
+            except RateLimitError as e:
+                # Parse retry-after from error message if available
+                wait_time = min(30 * (2 ** attempt), 120)  # 30s, 60s, 120s max
+                error_msg = str(e)
+                # Try to extract wait time from "Please try again in Xm Ys" pattern
+                import re as re_mod
+                match = re_mod.search(r'try again in (\d+)m', error_msg)
+                if match:
+                    wait_time = min(int(match.group(1)) * 60, 300)  # Cap at 5 min
+                else:
+                    match = re_mod.search(r'try again in (\d+\.?\d*)s', error_msg)
+                    if match:
+                        wait_time = min(int(float(match.group(1))) + 1, 120)
+
+                if attempt < max_retries - 1:
+                    logger.warning(f"Rate limit hit, waiting {wait_time}s before retry {attempt+2}/{max_retries}")
+                    time.sleep(wait_time)
+                else:
+                    raise
     
     def chat_json(
         self,

@@ -304,22 +304,39 @@ class SimulationRunner:
                     state.reddit_current_round = round_num
                     cls._save_run_state(state)
 
-                    for i, agent_name in enumerate(agent_names):
+                    # Batch all agents into one LLM call to save tokens
+                    try:
+                        agents_str = ", ".join(agent_names)
+                        prompt = f"""You are simulating a prediction discussion. The topic is: "{requirement}"
+
+This is round {round_num} of {total_rounds}. Generate a short post (1-2 sentences each) for each of these agents: {agents_str}
+
+Format your response as JSON array: [{{"agent":"name","post":"their post"}}]
+Be specific, analytical, and give different perspectives. Respond with ONLY the JSON array."""
+
+                        response = llm.chat([{"role": "user", "content": prompt}], temperature=0.8, max_tokens=500)
+
+                        # Parse batch response
+                        import re as re_mod
+                        cleaned = re_mod.sub(r'^```(?:json)?\s*\n?', '', response.strip())
+                        cleaned = re_mod.sub(r'\n?```\s*$', '', cleaned).strip()
                         try:
-                            prompt = f"""You are {agent_name}, participating in a prediction discussion about: "{requirement}"
+                            posts = json.loads(cleaned)
+                        except json.JSONDecodeError:
+                            # Fallback: treat whole response as one post
+                            posts = [{"agent": agent_names[0], "post": response[:200]}]
 
-This is round {round_num} of {total_rounds}. Write a short social media post (2-3 sentences) sharing your perspective on this prediction. Be specific and analytical. Respond with ONLY the post text, no meta-commentary."""
+                        for idx, post_data in enumerate(posts):
+                            agent_name = post_data.get("agent", f"Agent_{idx}")
+                            content = post_data.get("post", "")
 
-                            response = llm.chat([{"role": "user", "content": prompt}], temperature=0.8, max_tokens=200)
-
-                            # Log as action
                             action_data = {
                                 "round": round_num,
                                 "timestamp": datetime.now().isoformat(),
-                                "agent_id": i,
+                                "agent_id": idx,
                                 "agent_name": agent_name,
                                 "action_type": "CREATE_POST",
-                                "content": response,
+                                "content": content,
                                 "success": True
                             }
 
@@ -331,17 +348,17 @@ This is round {round_num} of {total_rounds}. Write a short social media post (2-
                                 round_num=round_num,
                                 timestamp=datetime.now().isoformat(),
                                 platform="twitter",
-                                agent_id=i,
+                                agent_id=idx,
                                 agent_name=agent_name,
                                 action_type="CREATE_POST",
-                                result=response[:100],
+                                result=content[:100],
                                 success=True
                             ))
-                            cls._save_run_state(state)
+                        cls._save_run_state(state)
 
-                        except Exception as e:
-                            logger.warning(f"Lite sim agent {agent_name} error: {e}")
-                            continue
+                    except Exception as e:
+                        logger.warning(f"Lite sim round {round_num} error: {e}")
+                        continue
 
                 state.runner_status = RunnerStatus.COMPLETED
                 state.completed_at = datetime.now().isoformat()
